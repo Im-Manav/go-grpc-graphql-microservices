@@ -13,7 +13,7 @@ type Server struct {
 	orderClient   *order.Client
 }
 
-func NewGraphQLServer(accountUrl, catalogUrl, orderUrl string) (*Server, error) {
+func NewGraphQLServer(accountUrl, catalogURL, orderURL string) (*Server, error) {
 	// Connect to account service
 	accountClient, err := account.NewClient(accountUrl)
 	if err != nil {
@@ -21,14 +21,14 @@ func NewGraphQLServer(accountUrl, catalogUrl, orderUrl string) (*Server, error) 
 	}
 
 	// Connect to product service
-	catalogClient, err := catalog.NewClient(catalogUrl)
+	catalogClient, err := catalog.NewClient(catalogURL)
 	if err != nil {
 		accountClient.Close()
 		return nil, err
 	}
 
 	// Connect to order service
-	orderClient, err := order.NewClient(orderUrl)
+	orderClient, err := order.NewClient(orderURL)
 	if err != nil {
 		accountClient.Close()
 		catalogClient.Close()

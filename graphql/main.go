@@ -1,11 +1,11 @@
+//go:generate go run github.com/99designs/gqlgen
 package main
 
 import (
 	"log"
 	"net/http"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/99designs/gqlgen/handler"
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -27,8 +27,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	http.Handle("/graphql", handler.New(s.ToExecutableSchema()))
-	http.Handle("/playground", playground.Handler("manav", "/graphql"))
+	http.Handle("/graphql", handler.GraphQL(s.ToExecutableSchema()))
+	http.Handle("/playground", handler.Playground("akhil", "/graphql"))
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

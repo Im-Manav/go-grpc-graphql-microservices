@@ -6,15 +6,8 @@ package elastic
 
 import (
 	"encoding/json"
-	"errors"
-	"io"
 	"io/ioutil"
 	"net/http"
-)
-
-var (
-	// ErrResponseSize is raised if a response body exceeds the given max body size.
-	ErrResponseSize = errors.New("elastic: response size too large")
 )
 
 // Response represents a response from Elasticsearch.
@@ -26,32 +19,18 @@ type Response struct {
 	Header http.Header
 	// Body is the deserialized response body.
 	Body json.RawMessage
-	// DeprecationWarnings lists all deprecation warnings returned from
-	// Elasticsearch.
-	DeprecationWarnings []string
 }
 
 // newResponse creates a new response from the HTTP response.
-func (c *Client) newResponse(res *http.Response, maxBodySize int64) (*Response, error) {
+func (c *Client) newResponse(res *http.Response) (*Response, error) {
 	r := &Response{
-		StatusCode:          res.StatusCode,
-		Header:              res.Header,
-		DeprecationWarnings: res.Header["Warning"],
+		StatusCode: res.StatusCode,
+		Header:     res.Header,
 	}
 	if res.Body != nil {
-		body := io.Reader(res.Body)
-		if maxBodySize > 0 {
-			if res.ContentLength > maxBodySize {
-				return nil, ErrResponseSize
-			}
-			body = io.LimitReader(body, maxBodySize+1)
-		}
-		slurp, err := ioutil.ReadAll(body)
+		slurp, err := ioutil.ReadAll(res.Body)
 		if err != nil {
 			return nil, err
-		}
-		if maxBodySize > 0 && int64(len(slurp)) > maxBodySize {
-			return nil, ErrResponseSize
 		}
 		// HEAD requests return a body but no content
 		if len(slurp) > 0 {

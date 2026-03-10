@@ -1,9 +1,9 @@
 scalar Time
 
-type Account{
-    id: String!
-    name: String!
-    orders: [Order!]!
+type Account {
+  id: String!
+  name: String!
+  orders: [Order!]!
 }
 
 type Product {
@@ -28,9 +28,9 @@ type OrderedProduct {
   quantity: Int!
 }
 
-input PaginationInput{
-    skip: Int
-    take: Int
+input PaginationInput {
+  skip: Int
+  take: Int
 }
 
 input AccountInput {
@@ -53,13 +53,13 @@ input OrderInput {
   products: [OrderProductInput!]!
 }
 
-type Mutation{
-    createAccount(account: AccountInput!): Account
-    createProduct(product: ProductInput!): Product
-    createOrder(order: OrderInput!): Order
+type Mutation {
+  createAccount(account: AccountInput!): Account
+  createProduct(product: ProductInput!): Product
+  createOrder(order: OrderInput!): Order
 }
 
-type Query{
-    accounts(pagination: PaginationInput, id: String): [Account!]!
-    products(pagination: PaginationInput, query: String, id: String): [Product!]!
+type Query {
+  accounts(pagination: PaginationInput, id: String): [Account!]!
+  products(pagination: PaginationInput, query: String, id: String): [Product!]!
 }

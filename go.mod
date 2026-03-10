@@ -1,31 +1,32 @@
 module github.com/Im-Manav/go-grpc-graphql-microservices
 
-go 1.25
+go 1.22
+
+toolchain go1.24.12
 
 require (
-	github.com/99designs/gqlgen v0.17.87
+	github.com/99designs/gqlgen v0.10.2
+	github.com/golang/protobuf v1.3.2
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/lib/pq v1.11.2
-	github.com/segmentio/ksuid v1.0.4
+	github.com/lib/pq v1.3.0
+	github.com/segmentio/ksuid v1.0.2
 	github.com/tinrab/retry v1.0.0
-	github.com/vektah/gqlparser/v2 v2.5.32
-	google.golang.org/grpc v1.79.1
-	google.golang.org/protobuf v1.36.11
-	gopkg.in/olivere/elastic.v5 v5.0.86
+	github.com/vektah/gqlparser v1.2.1
+	google.golang.org/grpc v1.26.0
+	gopkg.in/olivere/elastic.v5 v5.0.84
 )
 
 require (
 	github.com/agnivade/levenshtein v1.2.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.0 // indirect
-	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/mailru/easyjson v0.7.1 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
-	github.com/sosodev/duration v1.3.1 // indirect
-	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	github.com/gorilla/websocket v1.2.0 // indirect
+	github.com/hashicorp/golang-lru v0.5.0 // indirect
+	github.com/mailru/easyjson v0.0.0-20180730094502-03f2033d19d5 // indirect
+	github.com/pkg/errors v0.8.1 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
+	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa // indirect
+	golang.org/x/sys v0.0.0-20200117145432-59e60aa80a0c // indirect
+	golang.org/x/text v0.3.2 // indirect
+	google.golang.org/genproto v0.0.0-20200117163144-32f20d992d24 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

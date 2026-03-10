@@ -289,5 +289,4 @@ type IndexResponse struct {
 	PrimaryTerm   int64       `json:"_primary_term,omitempty"`
 	Status        int         `json:"status,omitempty"`
 	ForcedRefresh bool        `json:"forced_refresh,omitempty"`
-	Created       bool        `json:"created,omitempty"`
 }

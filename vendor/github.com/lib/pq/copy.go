@@ -1,15 +1,11 @@
 package pq
 
 import (
-	"bytes"
-	"context"
 	"database/sql/driver"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/lib/pq/internal/proto"
 )
 
 var (
@@ -20,41 +16,32 @@ var (
 	errCopyInProgress             = errors.New("pq: COPY in progress")
 )
 
-// CopyIn creates a COPY FROM statement which can be prepared with Tx.Prepare().
-// The target table should be visible in search_path.
-//
-// It copies all columns if the list of columns is empty.
+// CopyIn creates a COPY FROM statement which can be prepared with
+// Tx.Prepare().  The target table should be visible in search_path.
 func CopyIn(table string, columns ...string) string {
-	b := bytes.NewBufferString("COPY ")
-	BufferQuoteIdentifier(table, b)
-	makeStmt(b, columns...)
-	return b.String()
+	stmt := "COPY " + QuoteIdentifier(table) + " ("
+	for i, col := range columns {
+		if i != 0 {
+			stmt += ", "
+		}
+		stmt += QuoteIdentifier(col)
+	}
+	stmt += ") FROM STDIN"
+	return stmt
 }
 
 // CopyInSchema creates a COPY FROM statement which can be prepared with
 // Tx.Prepare().
 func CopyInSchema(schema, table string, columns ...string) string {
-	b := bytes.NewBufferString("COPY ")
-	BufferQuoteIdentifier(schema, b)
-	b.WriteRune('.')
-	BufferQuoteIdentifier(table, b)
-	makeStmt(b, columns...)
-	return b.String()
-}
-
-func makeStmt(b *bytes.Buffer, columns ...string) {
-	if len(columns) == 0 {
-		b.WriteString(" FROM STDIN")
-		return
-	}
-	b.WriteString(" (")
+	stmt := "COPY " + QuoteIdentifier(schema) + "." + QuoteIdentifier(table) + " ("
 	for i, col := range columns {
 		if i != 0 {
-			b.WriteString(", ")
+			stmt += ", "
 		}
-		BufferQuoteIdentifier(col, b)
+		stmt += QuoteIdentifier(col)
 	}
-	b.WriteString(") FROM STDIN")
+	stmt += ") FROM STDIN"
+	return stmt
 }
 
 type copyin struct {
@@ -65,11 +52,8 @@ type copyin struct {
 
 	closed bool
 
-	mu struct {
-		sync.Mutex
-		err error
-		driver.Result
-	}
+	sync.Mutex // guards err
+	err        error
 }
 
 const ciBufferSize = 64 * 1024
@@ -77,7 +61,7 @@ const ciBufferSize = 64 * 1024
 // flush buffer before the buffer is filled up and needs reallocation
 const ciBufferFlushSize = 63 * 1024
 
-func (cn *conn) prepareCopyIn(q string) (_ driver.Stmt, resErr error) {
+func (cn *conn) prepareCopyIn(q string) (_ driver.Stmt, err error) {
 	if !cn.isInTransaction() {
 		return nil, errCopyNotSupportedOutsideTxn
 	}
@@ -89,83 +73,69 @@ func (cn *conn) prepareCopyIn(q string) (_ driver.Stmt, resErr error) {
 		done:    make(chan bool, 1),
 	}
 	// add CopyData identifier + 4 bytes for message length
-	ci.buffer = append(ci.buffer, byte(proto.CopyDataRequest), 0, 0, 0, 0)
+	ci.buffer = append(ci.buffer, 'd', 0, 0, 0, 0)
 
-	b := cn.writeBuf(proto.Query)
+	b := cn.writeBuf('Q')
 	b.string(q)
-	err := cn.send(b)
-	if err != nil {
-		return nil, err
-	}
+	cn.send(b)
 
 awaitCopyInResponse:
 	for {
-		t, r, err := cn.recv1()
-		if err != nil {
-			return nil, err
-		}
+		t, r := cn.recv1()
 		switch t {
-		case proto.CopyInResponse:
+		case 'G':
 			if r.byte() != 0 {
-				resErr = errBinaryCopyNotSupported
+				err = errBinaryCopyNotSupported
 				break awaitCopyInResponse
 			}
 			go ci.resploop()
 			return ci, nil
-		case proto.CopyOutResponse:
-			resErr = errCopyToNotSupported
+		case 'H':
+			err = errCopyToNotSupported
 			break awaitCopyInResponse
-		case proto.ErrorResponse:
-			resErr = parseError(r, q)
-		case proto.ReadyForQuery:
-			if resErr == nil {
-				ci.setBad(driver.ErrBadConn)
-				return nil, fmt.Errorf("pq: unexpected ReadyForQuery in response to COPY")
+		case 'E':
+			err = parseError(r)
+		case 'Z':
+			if err == nil {
+				ci.setBad()
+				errorf("unexpected ReadyForQuery in response to COPY")
 			}
 			cn.processReadyForQuery(r)
-			return nil, resErr
+			return nil, err
 		default:
-			ci.setBad(driver.ErrBadConn)
-			return nil, fmt.Errorf("pq: unknown response for copy query: %q", t)
+			ci.setBad()
+			errorf("unknown response for copy query: %q", t)
 		}
 	}
 
 	// something went wrong, abort COPY before we return
-	b = cn.writeBuf(proto.CopyFail)
-	b.string(resErr.Error())
-	err = cn.send(b)
-	if err != nil {
-		return nil, err
-	}
+	b = cn.writeBuf('f')
+	b.string(err.Error())
+	cn.send(b)
 
 	for {
-		t, r, err := cn.recv1()
-		if err != nil {
-			return nil, err
-		}
-
+		t, r := cn.recv1()
 		switch t {
-		case proto.CopyDoneResponse, proto.CommandComplete, proto.ErrorResponse:
-		case proto.ReadyForQuery:
+		case 'c', 'C', 'E':
+		case 'Z':
 			// correctly aborted, we're done
 			cn.processReadyForQuery(r)
-			return nil, resErr
+			return nil, err
 		default:
-			ci.setBad(driver.ErrBadConn)
-			return nil, fmt.Errorf("pq: unknown response for CopyFail: %q", t)
+			ci.setBad()
+			errorf("unknown response for CopyFail: %q", t)
 		}
 	}
 }
 
-func (ci *copyin) flush(buf []byte) error {
-	if len(buf)-1 > proto.MaxUint32 {
-		return errors.New("pq: too many columns")
-	}
+func (ci *copyin) flush(buf []byte) {
 	// set message length (without message identifier)
 	binary.BigEndian.PutUint32(buf[1:], uint32(len(buf)-1))
 
 	_, err := ci.cn.c.Write(buf)
-	return err
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (ci *copyin) resploop() {
@@ -173,32 +143,25 @@ func (ci *copyin) resploop() {
 		var r readBuf
 		t, err := ci.cn.recvMessage(&r)
 		if err != nil {
-			ci.setBad(driver.ErrBadConn)
+			ci.setBad()
 			ci.setError(err)
 			ci.done <- true
 			return
 		}
 		switch t {
-		case proto.CommandComplete:
+		case 'C':
 			// complete
-			res, _, err := ci.cn.parseComplete(r.string())
-			if err != nil {
-				panic(err)
-			}
-			ci.setResult(res)
-		case proto.NoticeResponse:
-			if n := ci.cn.noticeHandler; n != nil {
-				n(parseError(&r, ""))
-			}
-		case proto.ReadyForQuery:
+		case 'N':
+			// NoticeResponse
+		case 'Z':
 			ci.cn.processReadyForQuery(&r)
 			ci.done <- true
 			return
-		case proto.ErrorResponse:
-			err := parseError(&r, "")
+		case 'E':
+			err := parseError(&r)
 			ci.setError(err)
 		default:
-			ci.setBad(driver.ErrBadConn)
+			ci.setBad()
 			ci.setError(fmt.Errorf("unknown response during CopyIn: %q", t))
 			ci.done <- true
 			return
@@ -206,45 +169,34 @@ func (ci *copyin) resploop() {
 	}
 }
 
-func (ci *copyin) setBad(err error) {
-	ci.cn.err.set(err)
+func (ci *copyin) setBad() {
+	ci.Lock()
+	ci.cn.bad = true
+	ci.Unlock()
 }
 
-func (ci *copyin) getBad() error {
-	return ci.cn.err.get()
+func (ci *copyin) isBad() bool {
+	ci.Lock()
+	b := ci.cn.bad
+	ci.Unlock()
+	return b
 }
 
-func (ci *copyin) err() error {
-	ci.mu.Lock()
-	err := ci.mu.err
-	ci.mu.Unlock()
-	return err
+func (ci *copyin) isErrorSet() bool {
+	ci.Lock()
+	isSet := (ci.err != nil)
+	ci.Unlock()
+	return isSet
 }
 
 // setError() sets ci.err if one has not been set already.  Caller must not be
 // holding ci.Mutex.
 func (ci *copyin) setError(err error) {
-	ci.mu.Lock()
-	if ci.mu.err == nil {
-		ci.mu.err = err
+	ci.Lock()
+	if ci.err == nil {
+		ci.err = err
 	}
-	ci.mu.Unlock()
-}
-
-func (ci *copyin) setResult(result driver.Result) {
-	ci.mu.Lock()
-	ci.mu.Result = result
-	ci.mu.Unlock()
-}
-
-func (ci *copyin) getResult() driver.Result {
-	ci.mu.Lock()
-	result := ci.mu.Result
-	ci.mu.Unlock()
-	if result == nil {
-		return driver.RowsAffected(0)
-	}
-	return result
+	ci.Unlock()
 }
 
 func (ci *copyin) NumInput() int {
@@ -262,33 +214,27 @@ func (ci *copyin) Query(v []driver.Value) (r driver.Rows, err error) {
 // You need to call Exec(nil) to sync the COPY stream and to get any
 // errors from pending data, since Stmt.Close() doesn't return errors
 // to the user.
-func (ci *copyin) Exec(v []driver.Value) (driver.Result, error) {
+func (ci *copyin) Exec(v []driver.Value) (r driver.Result, err error) {
 	if ci.closed {
 		return nil, errCopyInClosed
 	}
-	if err := ci.getBad(); err != nil {
-		return nil, err
+
+	if ci.isBad() {
+		return nil, driver.ErrBadConn
 	}
-	if err := ci.err(); err != nil {
-		return nil, err
+	defer ci.cn.errRecover(&err)
+
+	if ci.isErrorSet() {
+		return nil, ci.err
 	}
 
 	if len(v) == 0 {
-		if err := ci.Close(); err != nil {
-			return driver.RowsAffected(0), err
-		}
-		return ci.getResult(), nil
+		return driver.RowsAffected(0), ci.Close()
 	}
 
-	var (
-		numValues = len(v)
-		err       error
-	)
+	numValues := len(v)
 	for i, value := range v {
-		ci.buffer, err = appendEncodedText(ci.buffer, value)
-		if err != nil {
-			return nil, ci.cn.handleError(err)
-		}
+		ci.buffer = appendEncodedText(&ci.cn.parameterStatus, ci.buffer, value)
 		if i < numValues-1 {
 			ci.buffer = append(ci.buffer, '\t')
 		}
@@ -297,10 +243,7 @@ func (ci *copyin) Exec(v []driver.Value) (driver.Result, error) {
 	ci.buffer = append(ci.buffer, '\n')
 
 	if len(ci.buffer) > ciBufferFlushSize {
-		err := ci.flush(ci.buffer)
-		if err != nil {
-			return nil, ci.cn.handleError(err)
-		}
+		ci.flush(ci.buffer)
 		// reset buffer, keep bytes for message identifier and length
 		ci.buffer = ci.buffer[:5]
 	}
@@ -308,69 +251,31 @@ func (ci *copyin) Exec(v []driver.Value) (driver.Result, error) {
 	return driver.RowsAffected(0), nil
 }
 
-// CopyData inserts a raw string into the COPY stream. The insert is
-// asynchronous and CopyData can return errors from previous CopyData calls to
-// the same COPY stmt.
-//
-// You need to call Exec(nil) to sync the COPY stream and to get any
-// errors from pending data, since Stmt.Close() doesn't return errors
-// to the user.
-func (ci *copyin) CopyData(ctx context.Context, line string) (driver.Result, error) {
-	if ci.closed {
-		return nil, errCopyInClosed
-	}
-	if finish := ci.cn.watchCancel(ctx); finish != nil {
-		defer finish()
-	}
-	if err := ci.getBad(); err != nil {
-		return nil, err
-	}
-	if err := ci.err(); err != nil {
-		return nil, err
-	}
-
-	ci.buffer = append(ci.buffer, []byte(line)...)
-	ci.buffer = append(ci.buffer, '\n')
-
-	if len(ci.buffer) > ciBufferFlushSize {
-		err := ci.flush(ci.buffer)
-		if err != nil {
-			return nil, ci.cn.handleError(err)
-		}
-
-		// reset buffer, keep bytes for message identifier and length
-		ci.buffer = ci.buffer[:5]
-	}
-
-	return driver.RowsAffected(0), nil
-}
-
-func (ci *copyin) Close() error {
+func (ci *copyin) Close() (err error) {
 	if ci.closed { // Don't do anything, we're already closed
 		return nil
 	}
 	ci.closed = true
 
-	if err := ci.getBad(); err != nil {
-		return err
+	if ci.isBad() {
+		return driver.ErrBadConn
 	}
+	defer ci.cn.errRecover(&err)
 
 	if len(ci.buffer) > 0 {
-		err := ci.flush(ci.buffer)
-		if err != nil {
-			return ci.cn.handleError(err)
-		}
+		ci.flush(ci.buffer)
 	}
 	// Avoid touching the scratch buffer as resploop could be using it.
-	err := ci.cn.sendSimpleMessage(proto.CopyDoneRequest)
+	err = ci.cn.sendSimpleMessage('c')
 	if err != nil {
-		return ci.cn.handleError(err)
+		return err
 	}
 
 	<-ci.done
 	ci.cn.inCopy = false
 
-	if err := ci.err(); err != nil {
+	if ci.isErrorSet() {
+		err = ci.err
 		return err
 	}
 	return nil

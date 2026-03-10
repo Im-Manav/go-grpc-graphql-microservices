@@ -1,11 +1,9 @@
 package graphql
 
-import "context"
-
-func OneShot(resp *Response) ResponseHandler {
+func OneShot(resp *Response) func() *Response {
 	var oneshot bool
 
-	return func(context context.Context) *Response {
+	return func() *Response {
 		if oneshot {
 			return nil
 		}

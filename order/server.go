@@ -1,3 +1,4 @@
+//go:generate protoc ./order.proto --go_out=plugins=grpc:./pb
 package order
 
 import (
@@ -15,7 +16,6 @@ import (
 )
 
 type grpcServer struct {
-	pb.UnimplementedOrderServiceServer
 	service       Service
 	accountClient *account.Client
 	catalogClient *catalog.Client
@@ -42,10 +42,9 @@ func ListenGRPC(s Service, accountURL, catalogURL string, port int) error {
 
 	serv := grpc.NewServer()
 	pb.RegisterOrderServiceServer(serv, &grpcServer{
-		UnimplementedOrderServiceServer: pb.UnimplementedOrderServiceServer{},
-		service:                         s,
-		accountClient:                   accountClient,
-		catalogClient:                   catalogClient,
+		s,
+		accountClient,
+		catalogClient,
 	})
 	reflection.Register(serv)
 

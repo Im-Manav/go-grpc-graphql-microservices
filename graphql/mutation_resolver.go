@@ -49,7 +49,6 @@ func (r *mutationResolver) CreateProduct(ctx context.Context, in ProductInput) (
 		Description: p.Description,
 		Price:       p.Price,
 	}, nil
-
 }
 
 func (r *mutationResolver) CreateOrder(ctx context.Context, in OrderInput) (*Order, error) {
@@ -57,7 +56,6 @@ func (r *mutationResolver) CreateOrder(ctx context.Context, in OrderInput) (*Ord
 	defer cancel()
 
 	var products []order.OrderedProduct
-
 	for _, p := range in.Products {
 		if p.Quantity <= 0 {
 			return nil, ErrInvalidParameter
