@@ -1,13 +1,71 @@
 # gRPC Microservices Project with GraphQL API
 
-![go-grpc-grapqhl-microservices](./assets/thumbnail.jpg)
-
-Follow along with my youtube video - https://www.youtube.com/watch?v=5UIh1dV7aZ8&t=1346s
-
 This project demonstrates a microservices architecture using gRPC for inter-service communication and GraphQL as the API gateway. It includes services for account management, product catalog, and order processing.
 
-Note from akhil - I built this project with the latest GO version and packages, but in this particular code - I have reverted to an older version of GO - why? Across all my production apps, I'm using old versions of GO - simply for more stability and also because I can easy fix if a new issue shows up - many issues prop up in projects with multiple moving parts (and this project has many of them - grpc, graphql, postgres, docker compose, elastisearch and GO) because each of the moving parts keep updating.
-If you're a one man team - keep your software manageable with this technique - use versions of software you've previously built with.
+## Directory Structure
+
+```
+.
+├── account/                    # Account Service
+│   ├── cmd/
+│   │   └── account/
+│   │       └── main.go
+│   ├── pb/
+│   │   └── account.pb.go       # Generated protobuf code
+│   ├── account.proto
+│   ├── app.dockerfile
+│   ├── client.go
+│   ├── db.dockerfile
+│   ├── repository.go
+│   ├── server.go
+│   ├── service.go
+│   └── up.sql                  # Database schema
+├── catalog/                    # Catalog Service
+│   ├── cmd/
+│   │   └── catalog/
+│   │       └── main.go
+│   ├── pb/
+│   │   └── catalog.pb.go
+│   ├── app.dockerfile
+│   ├── catalog.proto
+│   ├── client.go
+│   ├── repository.go
+│   ├── server.go
+│   └── service.go
+├── order/                      # Order Service
+│   ├── cmd/
+│   │   └── order/
+│   │       └── main.go
+│   ├── pb/
+│   │   └── order.pb.go
+│   ├── app.dockerfile
+│   ├── client.go
+│   ├── db.dockerfile
+│   ├── order.proto
+│   ├── repository.go
+│   ├── server.go
+│   ├── service.go
+│   └── up.sql
+├── graphql/                    # GraphQL API Gateway
+│   ├── account_resolver.go
+│   ├── app.dockerfile
+│   ├── generated.go
+│   ├── gqlgen.yml
+│   ├── graph.go
+│   ├── main.go
+│   ├── models_gen.go
+│   ├── models.go
+│   ├── mutation_resolver.go
+│   ├── query_resolver.go
+│   └── schema.graphql
+├── assets/                     # Project assets
+├── vendor/                     # Go dependencies
+├── docker-compose.yaml
+├── go.mod
+├── go.sum
+├── LICENSE
+└── README.md
+```
 
 ## Project Structure
 
